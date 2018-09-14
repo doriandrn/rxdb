@@ -48,6 +48,9 @@ function () {
     this._subs = [];
     this._repStates = [];
     this.pouch = null; // this is needed to preserve this name
+    // uninitalized length
+
+    this._length = -1;
 
     _applyHookFunctions(this);
   }
@@ -78,12 +81,19 @@ function () {
     this._subs.push(this._observable$.pipe(filter(function (cE) {
       return !cE.data.isLocal;
     })).subscribe(function (cE) {
-      // when data changes, send it to RxDocument in docCache
+      // when data changes:
+      // send it to RxDocument in docCache
       var doc = _this._docCache.get(cE.data.doc);
 
-      if (doc) doc._handleChangeEvent(cE);
-    }));
+      if (doc) doc._handleChangeEvent(cE); // update collection length
 
+      _this._updateCollectionLength(cE.data.op);
+    })); // update initial length -> starts at 0
+
+
+    this.pouch.allDocs().then(function (entries) {
+      _this._length = entries.rows.length || 0;
+    });
     return Promise.all([spawnedPouchPromise, createIndexesPromise]);
   };
   /**
@@ -714,6 +724,21 @@ function () {
   _proto.remove = function remove() {
     return this.database.removeCollection(this.name);
   };
+  /**
+   * collection.length getter
+   */
+
+
+  /**
+  * Updates the collection length
+  * whenever an updating event op is triggered
+  * 
+  * @param {*} op 
+  */
+  _proto._updateCollectionLength = function _updateCollectionLength(op) {
+    if (['INSERT', 'REMOVE'].indexOf(op) < 0) return;
+    this._length = op === 'INSERT' ? this._length + 1 : this._length - 1;
+  };
 
   _createClass(RxCollection, [{
     key: "$",
@@ -765,6 +790,11 @@ function () {
         return _this9._onDestroyCall = res;
       });
       return this._onDestroy;
+    }
+  }, {
+    key: "length",
+    get: function get() {
+      return this._length;
     }
   }]);
 
